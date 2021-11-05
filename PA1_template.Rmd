@@ -7,19 +7,68 @@ output:
 
 
 ## Loading and preprocessing the data
-
-
+Note that the file 'activity.csv' should be in the working directory for this code to run.  
+```{r readdata}
+dat <- read.csv("activity.csv") # read data
+dat$date_chr = dat$date # save the dates as characters just in case
+dat$date <- strptime(dat$date, "%Y-%m-%d") # convert to date format
+```
 
 ## What is mean total number of steps taken per day?
-
+```{r meansteps}
+steps_byday <- with(dat,tapply(steps,date_chr,sum,na.rm=TRUE))
+hist(steps_byday,xlab='Total Steps Per Day',ylab='Frequency',main='Histogram of Steps Per Day',freq=TRUE)
+meansteps = mean(steps_byday,na.rm=TRUE)
+mediansteps=median(steps_byday,na.rm=TRUE)
+data.frame("Mean Steps" =meansteps,"Median Steps"=mediansteps)
+```
 
 
 ## What is the average daily activity pattern?
-
+```{r dailypattern}
+steps_byinterval <- with(dat,tapply(steps,interval,mean,na.rm=TRUE))
+plot(names(steps_byinterval),steps_byinterval,type='l',xlab='Interval',ylab='Number of Steps',main='Average Steps By Interval')
+maxinterval = which(steps_byinterval == max(steps_byinterval))
+data.frame("Max Interval"=names(steps_byinterval)[maxinterval])
+```
 
 
 ## Imputing missing values
+Given the strong dependence of steps on the interval seen above, we impute by replacing NAs with the average from that interval.
+```{r imputing}
+print(data.frame("Number of NAs"=length(which(is.na(dat$steps)))))
+i0 <- which(is.na(dat$steps)) # pull out NAs
+j0 <- match(dat$interval[i0],names(steps_byinterval)) # match intervals
 
+dat_imputed = dat # make new dataset
+dat_imputed$steps[i0] = steps_byinterval[j0] # fill
 
+steps_byday <- with(dat_imputed,tapply(steps,date_chr,sum,na.rm=TRUE))
+hist(steps_byday,xlab='Total Steps Per Day',ylab='Frequency',main='Histogram of Steps Per Day',freq=TRUE)
+meansteps = mean(steps_byday,na.rm=TRUE)
+mediansteps=median(steps_byday,na.rm=TRUE)
+data.frame("Mean Steps" =meansteps,"Median Steps"=mediansteps)
+```
+Imputing data seems to have made the distribution more symmetric (median and mean are the same).  
 
 ## Are there differences in activity patterns between weekdays and weekends?
+```{r weekdays,message=FALSE}
+# find day of week
+dat_imputed$dayofweek <- weekdays(dat_imputed$date)
+
+# make factor for weekday, weekend
+weekdaylist <- c("Monday","Tuesday","Wednesday","Thursday","Friday")
+weekendlist <- c("Saturday","Sunday")
+dat_imputed$weekday = dat_imputed$dayofweek
+dat_imputed$weekday[dat_imputed$dayofweek %in% weekdaylist] = "weekday"
+dat_imputed$weekday[dat_imputed$dayofweek %in% weekendlist] = "weekend"
+dat_imputed$weekday <- factor(dat_imputed$weekday,levels=c("weekday","weekend"))
+
+# find average steps by interval for weekdays and weekends
+library(dplyr)
+steps_byinterval <- dat_imputed %>% group_by(weekday,interval) %>% summarise(steps=mean(steps))
+
+# plot
+library(lattice)
+xyplot(steps ~ interval | weekday, data=steps_byinterval,layout=c(1,2),type='l')
+```
